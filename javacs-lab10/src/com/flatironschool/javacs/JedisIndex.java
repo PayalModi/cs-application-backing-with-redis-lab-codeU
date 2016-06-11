@@ -59,6 +59,30 @@ public class JedisIndex {
 		String redisKey = termCounterKey(url);
 		return jedis.exists(redisKey);
 	}
+
+	/**
+     * Adds a URL to the set associated with `term`.
+     */
+    public void add(String term, TermCounter tc) {
+    	String urlSet = urlSetKey(term);
+    	jedis.sadd(urlSet, tc.getLabel());
+    }
+
+    /**
+     * Pushes the contents of the TermCounter to Redis.
+     */
+    public List<Object> pushTermCounterToRedis(TermCounter tc) {
+    	Transaction t = jedis.multi();
+
+   		String url = tc.getLabel();
+
+   		for (String term : tc.keySet()) {
+   			t.hset(termCounterKey(url), term, tc.get(term).toString());
+   			t.sadd(urlSetKey(term), url);
+   		}
+
+    	return t.exec();
+    }
 	
 	/**
 	 * Looks up a search term and returns a set of URLs.
@@ -67,8 +91,8 @@ public class JedisIndex {
 	 * @return Set of URLs.
 	 */
 	public Set<String> getURLs(String term) {
-        // FILL THIS IN!
-		return null;
+        String urlSet = urlSetKey(term);
+    	return jedis.smembers(urlSet);
 	}
 
     /**
@@ -78,8 +102,12 @@ public class JedisIndex {
 	 * @return Map from URL to count.
 	 */
 	public Map<String, Integer> getCounts(String term) {
-        // FILL THIS IN!
-		return null;
+		Map<String, Integer> countMap = new HashMap<String, Integer>();
+        Set<String> urls = getURLs(term);
+        for (String url : urls) {
+        	countMap.put(url, getCount(url, term));
+        }
+        return countMap;
 	}
 
     /**
@@ -90,8 +118,8 @@ public class JedisIndex {
 	 * @return
 	 */
 	public Integer getCount(String url, String term) {
-        // FILL THIS IN!
-		return null;
+        String termCounterString = termCounterKey(url);
+    	return new Integer(jedis.hget(termCounterString, term));
 	}
 
 
@@ -102,7 +130,10 @@ public class JedisIndex {
 	 * @param paragraphs  Collection of elements that should be indexed.
 	 */
 	public void indexPage(String url, Elements paragraphs) {
-        // FILL THIS IN!
+		TermCounter myTermCounter = new TermCounter(url);
+		myTermCounter.processElements(paragraphs);
+		pushTermCounterToRedis(myTermCounter);
+		return;
 	}
 
 	/**
